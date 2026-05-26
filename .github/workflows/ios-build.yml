@@ -1,0 +1,54 @@
+name: iOS IPA Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate iOS project
+        run: npx expo prebuild -p ios --no-install
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
+
+      - name: Build archive
+        run: |
+          cd ios
+          WORKSPACE=$(find . -maxdepth 1 -name '*.xcworkspace' | head -1)
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['workspace']['schemes'][0])")
+          xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -archivePath ../ios.xcarchive \
+            -sdk iphoneos \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package IPA
+        run: |
+          mkdir Payload
+          cp -r ios.xcarchive/Products/Applications/*.app Payload/
+          zip -r gongfeng-app.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: gongfeng-app.ipa

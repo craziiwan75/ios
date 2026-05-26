@@ -1,13 +1,20 @@
 {
   "expo": {
-    "name": "GongFengApp",
-    "slug": "GongFengApp",
+    "name": "工蜂办公",
+    "slug": "gongfeng-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.gongfeng.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,6 +26,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "da6a8b0e-fb4e-4bae-b3ca-2e6ea7b811fe"
+      }
     }
   }
 }
