@@ -16,35 +16,57 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Generate iOS project
         run: npx expo prebuild -p ios --no-install
+        env:
+          CI: 1
+          EXPO_NO_GIT_STATUS: 1
+
+      - name: Show iOS directory
+        run: ls ios/
 
       - name: Install CocoaPods
         run: |
           cd ios
-          pod install
+          pod install --repo-update
 
       - name: Build archive
         run: |
           cd ios
           WORKSPACE=$(find . -maxdepth 1 -name '*.xcworkspace' | head -1)
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['workspace']['schemes'][0])")
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json 2>/dev/null \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['workspace']['schemes'][0])")
+          echo "Workspace: $WORKSPACE"
+          echo "Scheme: $SCHEME"
           xcodebuild archive \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
             -archivePath ../ios.xcarchive \
-            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            | xcpretty || xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -archivePath ../ios.xcarchive \
+            -destination "generic/platform=iOS" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER=""
 
       - name: Package IPA
         run: |
           mkdir Payload
-          cp -r ios.xcarchive/Products/Applications/*.app Payload/
+          find ios.xcarchive/Products/Applications -name "*.app" -maxdepth 1 -exec cp -r {} Payload/ \;
           zip -r gongfeng-app.ipa Payload
 
       - name: Upload IPA
