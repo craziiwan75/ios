@@ -37,6 +37,7 @@ jobs:
 
       - name: Build archive
         run: |
+          set -e
           cd ios
           WORKSPACE=$(find . -maxdepth 1 -name '*.xcworkspace' | head -1)
           SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json 2>/dev/null \
@@ -53,34 +54,28 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=YES \
             DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            | xcpretty || xcodebuild archive \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -archivePath ../ios.xcarchive \
-            -destination "generic/platform=iOS" \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=YES \
-            DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE_SPECIFIER=""
 
-      - name: Package IPA
+      - name: Verify archive & list structure
         run: |
+          if [ ! -d ios.xcarchive ]; then
+            echo "ERROR: ios.xcarchive 不存在，归档失败"
+            exit 1
+          fi
           echo "=== 归档目录结构 ==="
           find ios.xcarchive -type d | head -40
 
+      - name: Package IPA
+        run: |
           # 从标准路径 Products/Applications 查找 .app
           APP_PATH=$(find ios.xcarchive/Products/Applications -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1)
 
-          # 备用：全局搜索，排除中间产物目录
+          # 备用：全局搜索，排除中间产物
           if [ -z "$APP_PATH" ]; then
             echo "标准路径未找到，全局搜索..."
             APP_PATH=$(find ios.xcarchive -name "*.app" -type d \
               ! -path "*/Intermediates/*" \
-              ! -path "*-Runner.app/PlugIns/*" \
-              ! -name "*.appex" \
+              ! -path "*/PlugIns/*" \
               | head -1)
           fi
 
@@ -93,7 +88,7 @@ jobs:
           mkdir -p Payload
           cp -r "$APP_PATH" Payload/
 
-          # 使用 -y 保留符号链接，避免 IPA 损坏
+          # -y 保留符号链接，避免 IPA 损坏
           cd Payload && zip -ry ../gongfeng-app.ipa *.app
           cd ..
           echo "IPA 大小: $(du -sh gongfeng-app.ipa | cut -f1)"
