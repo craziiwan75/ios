@@ -39,7 +39,7 @@ jobs:
             -exec sed -i '' 's|// swift-tools-version: 6\.2|// swift-tools-version: 6.1|g' {} \;
           echo "Patched swift-tools-version in $(find . -name 'Package.swift' ! -path '*/node_modules/.cache/*' | wc -l) files"
 
-      - name: Disable code signing for all Pod targets
+      - name: Patch Pod targets (disable signing + force Swift 5 mode)
         run: |
           ruby - <<'RUBY'
           require 'xcodeproj'
@@ -50,10 +50,12 @@ jobs:
               config.build_settings['CODE_SIGNING_REQUIRED']       = 'NO'
               config.build_settings['CODE_SIGN_IDENTITY']          = ''
               config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''
+              config.build_settings['SWIFT_VERSION']               = '5.0'
+              config.build_settings['SWIFT_STRICT_CONCURRENCY']    = 'minimal'
             end
           end
           proj.save
-          puts "Disabled signing for #{proj.targets.count} pod targets"
+          puts "Patched #{proj.targets.count} pod targets (signing disabled, Swift 5 mode)"
           RUBY
 
       - name: Build archive
