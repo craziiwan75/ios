@@ -49,10 +49,13 @@ jobs:
             -exec sed -i '' 's/ weak let / weak var /g' {} \;
 
           # Fix 2: Sendable + weak var is illegal in Swift 6 strict mode.
-          #   Change explicit `: Sendable {` → `: @unchecked Sendable {` so the
-          #   compiler doesn't verify thread-safety of mutable weak properties.
+          #   Part A: classes directly conforming to Sendable
           find node_modules/expo-modules-jsi -name "*.swift" \
             -exec sed -i '' 's/: Sendable {/: @unchecked Sendable {/g' {} \;
+          #   Part B: classes inheriting Sendable via protocol (e.g. JavaScriptType)
+          #   Mark the weak var as nonisolated(unsafe) so the compiler skips the check.
+          find node_modules/expo-modules-jsi -name "*.swift" \
+            -exec sed -i '' 's/ weak var runtime:/ nonisolated(unsafe) weak var runtime:/g' {} \;
 
           # Fix 3: Trailing comma in function-type typealias parameter list causes
           #   "unexpected ',' separator" with Swift 6 on Xcode 16.4.
