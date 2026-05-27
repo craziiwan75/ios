@@ -9,8 +9,6 @@ on:
 jobs:
   build-ios:
     runs-on: macos-15
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_16.3.app/Contents/Developer
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,7 +35,7 @@ jobs:
           cd ios
           pod install --repo-update
 
-      - name: Patch swift-tools-version (6.2 → 6.1 for Xcode 16.3)
+      - name: Patch swift-tools-version (6.2 -> 6.1)
         run: |
           find . -name "Package.swift" \
             ! -path "*/node_modules/.cache/*" \
@@ -45,7 +43,7 @@ jobs:
           COUNT=$(find . -name "Package.swift" ! -path "*/node_modules/.cache/*" | wc -l | tr -d ' ')
           echo "Patched $COUNT Package.swift files"
 
-      - name: Patch Pod targets (disable signing)
+      - name: Patch Pod targets (disable signing + Swift 5 mode)
         run: |
           ruby - <<'RUBY'
           require 'xcodeproj'
@@ -56,11 +54,12 @@ jobs:
               config.build_settings['CODE_SIGNING_REQUIRED']       = 'NO'
               config.build_settings['CODE_SIGN_IDENTITY']          = ''
               config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''
+              config.build_settings['SWIFT_VERSION']               = '5.0'
               config.build_settings['SWIFT_STRICT_CONCURRENCY']    = 'minimal'
             end
           end
           proj.save
-          puts "Patched #{proj.targets.count} pod targets (signing disabled)"
+          puts "Patched #{proj.targets.count} pod targets"
           RUBY
 
       - name: Build archive
@@ -78,7 +77,8 @@ jobs:
             -sdk iphoneos \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            SWIFT_VERSION=5.0
 
       - name: Package IPA
         run: |
