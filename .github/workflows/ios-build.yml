@@ -43,6 +43,17 @@ jobs:
           COUNT=$(find . -name "Package.swift" ! -path "*/node_modules/.cache/*" | wc -l | tr -d ' ')
           echo "Patched $COUNT Package.swift files"
 
+      - name: Patch expo-modules-jsi Swift sources for Swift 6.1 compatibility
+        run: |
+          SOURCES="node_modules/expo-modules-jsi/apple/Sources"
+          # Fix: weak let -> weak var (Swift 6 strict concurrency rule)
+          find "$SOURCES" -name "*.swift" \
+            -exec sed -i '' 's/weak let /weak var /g' {} \;
+          # Fix: remove trailing comma in closure type param list (Swift 6.2 feature, not in 6.1)
+          sed -i '' 's/consuming JavaScriptValuesBuffer,$/consuming JavaScriptValuesBuffer/' \
+            "$SOURCES/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift"
+          echo "Patched expo-modules-jsi Swift sources"
+
       - name: Patch Pod targets (disable signing + Swift 5 mode)
         run: |
           ruby - <<'RUBY'
