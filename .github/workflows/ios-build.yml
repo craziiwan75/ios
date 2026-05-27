@@ -39,11 +39,20 @@ jobs:
             -exec sed -i '' 's|// swift-tools-version: 6\.2|// swift-tools-version: 6.1|g' {} \;
           echo "Patched swift-tools-version in $(find . -name 'Package.swift' ! -path '*/node_modules/.cache/*' | wc -l) files"
 
-      - name: Patch expo-modules-jsi weak let → weak var
+      - name: Patch expo-modules-jsi for Xcode 16.4 compatibility
         run: |
+          # Fix 1: weak let → weak var (BSD sed has no \b, use space-based match)
           find node_modules/expo-modules-jsi -name "*.swift" \
-            -exec sed -i '' 's/\bweak let\b/weak var/g' {} \;
-          echo "Patched weak let in expo-modules-jsi"
+            -exec sed -i '' 's/ weak let / weak var /g' {} \;
+
+          # Fix 2: Remove upcoming Swift features that cause parser errors with Xcode 16.4
+          #   NonisolatedNonsendingByDefault + InferIsolatedConformances break
+          #   @GlobalActor closure typealias parsing ("unexpected ',' separator")
+          PKGSWIFT="node_modules/expo-modules-jsi/apple/Package.swift"
+          sed -i '' '/NonisolatedNonsendingByDefault/d' "$PKGSWIFT"
+          sed -i '' '/InferIsolatedConformances/d'      "$PKGSWIFT"
+
+          echo "expo-modules-jsi patched"
 
       - name: Patch Pod targets (disable signing + force Swift 5 mode)
         run: |
