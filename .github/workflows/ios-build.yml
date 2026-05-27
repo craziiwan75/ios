@@ -27,13 +27,27 @@ jobs:
           CI: 1
           EXPO_NO_GIT_STATUS: 1
 
-      - name: Show iOS directory
-        run: ls ios/
-
       - name: Install CocoaPods
         run: |
           cd ios
           pod install --repo-update
+
+      - name: Disable code signing for all Pod targets
+        run: |
+          ruby - <<'RUBY'
+          require 'xcodeproj'
+          proj = Xcodeproj::Project.open('ios/Pods/Pods.xcodeproj')
+          proj.targets.each do |target|
+            target.build_configurations.each do |config|
+              config.build_settings['CODE_SIGNING_ALLOWED']      = 'NO'
+              config.build_settings['CODE_SIGNING_REQUIRED']     = 'NO'
+              config.build_settings['CODE_SIGN_IDENTITY']        = ''
+              config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''
+            end
+          end
+          proj.save
+          puts "Done: disabled signing for #{proj.targets.count} pod targets"
+          RUBY
 
       - name: Build archive
         run: |
@@ -67,10 +81,8 @@ jobs:
 
       - name: Package IPA
         run: |
-          # 从标准路径 Products/Applications 查找 .app
           APP_PATH=$(find ios.xcarchive/Products/Applications -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1)
 
-          # 备用：全局搜索，排除中间产物
           if [ -z "$APP_PATH" ]; then
             echo "标准路径未找到，全局搜索..."
             APP_PATH=$(find ios.xcarchive -name "*.app" -type d \
@@ -87,8 +99,6 @@ jobs:
           echo "使用 App 路径: $APP_PATH"
           mkdir -p Payload
           cp -r "$APP_PATH" Payload/
-
-          # -y 保留符号链接，避免 IPA 损坏
           cd Payload && zip -ry ../gongfeng-app.ipa *.app
           cd ..
           echo "IPA 大小: $(du -sh gongfeng-app.ipa | cut -f1)"
