@@ -32,6 +32,13 @@ jobs:
           cd ios
           pod install --repo-update
 
+      - name: Patch swift-tools-version for Xcode 16.4 compatibility
+        run: |
+          find . -name "Package.swift" \
+            ! -path "*/node_modules/.cache/*" \
+            -exec sed -i '' 's|// swift-tools-version: 6\.2|// swift-tools-version: 6.1|g' {} \;
+          echo "Patched swift-tools-version in $(find . -name 'Package.swift' ! -path '*/node_modules/.cache/*' | wc -l) files"
+
       - name: Disable code signing for all Pod targets
         run: |
           ruby - <<'RUBY'
