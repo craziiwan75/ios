@@ -8,10 +8,15 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.3.app/Contents/Developer
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Verify Xcode version
+        run: xcodebuild -version
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -32,48 +37,18 @@ jobs:
           cd ios
           pod install --repo-update
 
-      - name: Patch swift-tools-version for Xcode 16.4 compatibility
+      - name: Patch swift-tools-version (6.2 → 6.1 for Xcode 16.3)
         run: |
           find . -name "Package.swift" \
             ! -path "*/node_modules/.cache/*" \
             -exec sed -i '' 's|// swift-tools-version: 6\.2|// swift-tools-version: 6.1|g' {} \;
-          echo "Patched swift-tools-version in $(find . -name 'Package.swift' ! -path '*/node_modules/.cache/*' | wc -l) files"
+          COUNT=$(find . -name "Package.swift" ! -path "*/node_modules/.cache/*" | wc -l | tr -d ' ')
+          echo "Patched $COUNT Package.swift files"
 
-      - name: Patch expo-modules-jsi for Xcode 16.4 compatibility
-        run: |
-          PKGSWIFT="node_modules/expo-modules-jsi/apple/Package.swift"
-          RUNTIME="node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift"
-
-          # Fix 1: weak let → weak var (BSD sed has no \b, use space-based match)
-          find node_modules/expo-modules-jsi -name "*.swift" \
-            -exec sed -i '' 's/ weak let / weak var /g' {} \;
-
-          # Fix 2: Sendable + weak var is illegal in Swift 6 strict mode.
-          #   Part A: classes directly conforming to Sendable
-          find node_modules/expo-modules-jsi -name "*.swift" \
-            -exec sed -i '' 's/: Sendable {/: @unchecked Sendable {/g' {} \;
-          #   Part B: classes inheriting Sendable via protocol (e.g. JavaScriptType)
-          #   Mark the weak var as nonisolated(unsafe) so the compiler skips the check.
-          find node_modules/expo-modules-jsi -name "*.swift" \
-            -exec sed -i '' 's/ weak var runtime:/ nonisolated(unsafe) weak var runtime:/g' {} \;
-
-          # Fix 3: Trailing comma in function-type typealias parameter list causes
-          #   "unexpected ',' separator" with Swift 6 on Xcode 16.4.
-          #   Remove the trailing comma from the AsyncFunctionClosure typealias.
-          sed -i '' 's/consuming JavaScriptValuesBuffer,$/consuming JavaScriptValuesBuffer/' "$RUNTIME"
-
-          # Fix 4: Remove upcoming Swift features that cause additional parser errors.
-          sed -i '' '/NonisolatedNonsendingByDefault/d' "$PKGSWIFT"
-          sed -i '' '/InferIsolatedConformances/d'      "$PKGSWIFT"
-
-          echo "expo-modules-jsi patched (weak→var, @unchecked Sendable, trailing comma, upcoming features)"
-
-      - name: Patch Pod targets (disable signing + force Swift 5 mode)
+      - name: Patch Pod targets (disable signing)
         run: |
           ruby - <<'RUBY'
           require 'xcodeproj'
-          # ExpoModulesJSI uses Swift 5.9+ keywords (consuming/sending) and must stay in Swift 6 mode
-          SWIFT6_TARGETS = %w[ExpoModulesJSI ExpoModulesWorklets].freeze
           proj = Xcodeproj::Project.open('ios/Pods/Pods.xcodeproj')
           proj.targets.each do |target|
             target.build_configurations.each do |config|
@@ -82,14 +57,10 @@ jobs:
               config.build_settings['CODE_SIGN_IDENTITY']          = ''
               config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''
               config.build_settings['SWIFT_STRICT_CONCURRENCY']    = 'minimal'
-              unless SWIFT6_TARGETS.include?(target.name)
-                config.build_settings['SWIFT_VERSION'] = '5.0'
-              end
             end
           end
           proj.save
-          swift5 = proj.targets.count { |t| !SWIFT6_TARGETS.include?(t.name) }
-          puts "Patched #{proj.targets.count} pod targets: #{swift5} in Swift 5 mode, #{SWIFT6_TARGETS.count} kept in Swift 6 mode"
+          puts "Patched #{proj.targets.count} pod targets (signing disabled)"
           RUBY
 
       - name: Build archive
